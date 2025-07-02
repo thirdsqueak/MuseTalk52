@@ -8,6 +8,10 @@ import numpy as np
 import sys
 import subprocess
 
+
+from gtts import gTTS
+from pydub import AudioSegment
+import uuid
 from huggingface_hub import snapshot_download
 import requests
 
@@ -129,7 +133,7 @@ def print_directory_contents(path):
             print(child_path)
 
 def download_model():
-    # 检查必需的模型文件是否存在
+    
     required_models = {
         "MuseTalk": f"{CheckpointsDir}/musetalkV15/unet.pth",
         "MuseTalk": f"{CheckpointsDir}/musetalkV15/musetalk.json",
@@ -160,6 +164,16 @@ def download_model():
     else:
         print("All required model files exist.")
 
+def text_to_speech_gtts(text):
+    mp3_path = f"temp_tts_{uuid.uuid4()}.mp3"
+    wav_path = f"temp_tts_{uuid.uuid4()}.wav"
+    tts = gTTS(text=str(text), lang='ru')  # <-- Тоже на всякий случай строка
+    tts.save(mp3_path)
+
+    sound = AudioSegment.from_mp3(mp3_path)
+    sound.export(wav_path, format="wav")
+    os.remove(mp3_path)
+    return wav_path
 
 
 
@@ -181,9 +195,30 @@ def fast_check_ffmpeg():
 
 
 @torch.no_grad()
-def inference(audio_path, video_path, bbox_shift, extra_margin=10, parsing_mode="jaw", 
-              left_cheek_width=90, right_cheek_width=90, progress=gr.Progress(track_tqdm=True)):
+# def inference(audio_path, video_path, bbox_shift,text_input=None, extra_margin=10, parsing_mode="jaw", 
+#               left_cheek_width=90, right_cheek_width=90, progress=gr.Progress(track_tqdm=True)):
+# НОВОЕ 
+def inference(
+    audio_path,          # 1. gr.Audio
+    video_path,          # 2. gr.Video
+    bbox_shift,          # 3. gr.Number
+    extra_margin,        # 4. gr.Slider
+    parsing_mode,        # 5. gr.Radio
+    left_cheek_width,    # 6. gr.Slider
+    right_cheek_width,   # 7. gr.Slider
+    text_input=None,     # 8. gr.Textbox
+    progress=gr.Progress(track_tqdm=True) 
+):
     # Set default parameters, aligned with inference.py
+    if text_input and (audio_path is None or audio_path == ""):
+        print("Generating TTS audio from text...")
+        audio_path = text_to_speech_gtts(text_input)
+
+    # left_cheek_width = int(left_cheek_width)
+    # right_cheek_width = int(right_cheek_width)
+    # bbox_shift = int(bbox_shift)
+    # extra_margin = int(extra_margin)
+
     args_dict = {
         "result_dir": './results/output', 
         "fps": 25, 
@@ -478,27 +513,8 @@ css = """#input_img {max-width: 1024px !important} #output_vid {max-width: 1024p
 
 with gr.Blocks(css=css) as demo:
     gr.Markdown(
-        """<div align='center'> <h1>MuseTalk: Real-Time High-Fidelity Video Dubbing via Spatio-Temporal Sampling</h1> \
-                    <h2 style='font-weight: 450; font-size: 1rem; margin: 0rem'>\
-                    </br>\
-                    Yue Zhang <sup>*</sup>,\
-                    Zhizhou Zhong <sup>*</sup>,\
-                    Minhao Liu<sup>*</sup>,\
-                    Zhaokang Chen,\
-                    Bin Wu<sup>†</sup>,\
-                    Yubin Zeng,\
-                    Chao Zhang,\
-                    Yingjie He,\
-                    Junxin Huang,\
-                    Wenjiang Zhou <br>\
-                    (<sup>*</sup>Equal Contribution, <sup>†</sup>Corresponding Author, benbinwu@tencent.com)\
-                    Lyra Lab, Tencent Music Entertainment\
-                </h2> \
-                <a style='font-size:18px;color: #000000' href='https://github.com/TMElyralab/MuseTalk'>[Github Repo]</a>\
-                <a style='font-size:18px;color: #000000' href='https://github.com/TMElyralab/MuseTalk'>[Huggingface]</a>\
-                <a style='font-size:18px;color: #000000' href='https://arxiv.org/abs/2410.10122'> [Technical report] </a>"""
+        """<div align='center'> <h1>MuseTalk x Gtts</h1> """
     )
-
     with gr.Row():
         with gr.Column():
             audio = gr.Audio(label="Drving Audio",type="filepath")
@@ -508,7 +524,8 @@ with gr.Blocks(css=css) as demo:
             parsing_mode = gr.Radio(label="Parsing Mode", choices=["jaw", "raw"], value="jaw")
             left_cheek_width = gr.Slider(label="Left Cheek Width", minimum=20, maximum=160, value=90, step=5)
             right_cheek_width = gr.Slider(label="Right Cheek Width", minimum=20, maximum=160, value=90, step=5)
-            bbox_shift_scale = gr.Textbox(label="'left_cheek_width' and 'right_cheek_width' parameters determine the range of left and right cheeks editing when parsing model is 'jaw'. The 'extra_margin' parameter determines the movement range of the jaw. Users can freely adjust these three parameters to obtain better inpainting results.")
+            text_input = gr.Textbox(label="Text for TTS (Optional)", placeholder="Enter text for TTS here...", lines=2)
+            bbox_shift_scale = gr.Textbox(label="",lines=5, interactive=False)
 
             with gr.Row():
                 debug_btn = gr.Button("1. Test Inpainting ")
@@ -530,7 +547,8 @@ with gr.Blocks(css=css) as demo:
             extra_margin,
             parsing_mode,
             left_cheek_width,
-            right_cheek_width
+            right_cheek_width,
+            text_input
         ],
         outputs=[out1,bbox_shift_scale]
     )
@@ -542,7 +560,8 @@ with gr.Blocks(css=css) as demo:
             extra_margin,
             parsing_mode,
             left_cheek_width,
-            right_cheek_width
+            right_cheek_width,
+            text_input
         ],
         outputs=[debug_image, debug_info]
     )
