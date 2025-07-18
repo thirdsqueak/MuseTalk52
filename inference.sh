@@ -42,6 +42,9 @@ elif [ "$version" = "v1.5" ]; then
     unet_model_path="$model_dir/unet.pth"
     unet_config="$model_dir/musetalk.json"
     version_arg="v15"
+    cmd_args="$cmd_args --use_float16"
+    cmd_args="$cmd_args --batch_size 8"
+
 else
     echo "Invalid version specified. Please use v1.0 or v1.5."
     exit 1

@@ -16,16 +16,18 @@ def load_all_model(
     unet_model_path=os.path.join("models", "musetalkV15", "unet.pth"),
     vae_type="sd-vae",
     unet_config=os.path.join("models", "musetalkV15", "musetalk.json"),
-    device=None,
+    device=None, #none
 ):
     vae = VAE(
         model_path = os.path.join("models", vae_type),
+        use_float16=True
     )
     print(f"load unet model from {unet_model_path}")
     unet = UNet(
         unet_config=unet_config,
         model_path=unet_model_path,
-        device=device
+        device=device,
+        use_float16=True
     )
     pe = PositionalEncoding(d_model=384)
     return vae, unet, pe
@@ -75,7 +77,7 @@ def datagen(
 
 def cast_training_params(
     model: Union[torch.nn.Module, List[torch.nn.Module]],
-    dtype=torch.float32,
+    dtype=torch.float32, #def 32
 ):
     if not isinstance(model, list):
         model = [model]
@@ -89,8 +91,8 @@ def rand_log_normal(
     shape,
     loc=0.,
     scale=1.,
-    device='cpu',
-    dtype=torch.float32,
+    device='cpu', #default device='cpu' 
+    dtype=torch.float32, #default float32
     generator=None
 ):
     """Draws samples from an lognormal distribution."""

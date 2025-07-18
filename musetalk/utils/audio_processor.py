@@ -18,7 +18,9 @@ class AudioProcessor:
         librosa_output, sampling_rate = librosa.load(wav_path, sr=16000)
         assert sampling_rate == 16000
         # Split audio into 30s segments
-        segment_length = 30 * sampling_rate
+        # уменьшил до 10
+        
+        segment_length = 3 * sampling_rate
         segments = [librosa_output[i:i + segment_length] for i in range(0, len(librosa_output), segment_length)]
 
         features = []

@@ -551,7 +551,7 @@ if __name__ == '__main__':
         'T': 1,  # Number of frames to process at once
         'random_margin_method': "normal",  # Method for generating random margins: "normal" or "uniform"
         'dataset_key': "HDTF",  # Dataset to use: "HDTF", "VFHQ", or None for both
-        'image_size': 256,  # Size of processed images (height and width)
+        'image_size': 128,  # Size of processed images (height and width) было 256
         'sample_method': 'pose_similarity_and_mouth_dissimilarity',  # Method for selecting reference frames
         'top_k_ratio': 0.51,  # Ratio for top-k selection in reference frame sampling
         'contorl_face_min_size': True,  # Whether to enforce minimum face size

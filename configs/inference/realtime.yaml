@@ -1,10 +1,12 @@
 avator_1:
-  preparation: False  # ставь False, если уже есть landmarks/данные
+  preparation: False # ставь False, если уже есть landmarks/данные
   bbox_shift: 5
   fps: 5
-  batch_size: 16
+  batch_size: 8
+  float_16 : true
   image_resolution: 128
-  video_path: "data/video/52525.mp4"
+  skip_save_images: true
+  video_path: "data/video/3sectest.mp4"
   audio_clips:
-    audio_0: "data/audio/sun.wav"
+    audio_0: "data/audio/52.wav"
   

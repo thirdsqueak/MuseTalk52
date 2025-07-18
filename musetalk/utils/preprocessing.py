@@ -12,6 +12,8 @@ from mmpose.structures import merge_data_samples
 import torch
 from tqdm import tqdm
 
+from concurrent.futures import ThreadPoolExecutor
+
 # initialize the mmpose model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 config_file = './musetalk/utils/dwpose/rtmpose-l_8xb32-270e_coco-ubody-wholebody-384x288.py'
@@ -19,7 +21,7 @@ checkpoint_file = './models/dwpose/dw-ll_ucoco_384.pth'
 model = init_model(config_file, checkpoint_file, device=device)
 
 # initialize the face detection model
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cuda" #if torch.cuda.is_available() else "cpu"
 fa = FaceAlignment(LandmarksType._2D, flip_input=False,device=device)
 
 # maker if the bbox is not sufficient 
@@ -35,9 +37,15 @@ def resize_landmark(landmark, w, h, new_w, new_h):
 def read_imgs(img_list):
     frames = []
     print('reading images...')
-    for img_path in tqdm(img_list):
-        frame = cv2.imread(img_path)
-        frames.append(frame)
+    def read_single(path):
+        return cv2.imread(path)
+
+    with ThreadPoolExecutor(max_workers=20) as executor:  # можно изменить max_workers
+        frames = list(tqdm(executor.map(read_single, img_list), total=len(img_list)))
+    
+    # for img_path in tqdm(img_list):
+    #     frame = cv2.imread(img_path)
+    #     frames.append(frame)
     return frames
 
 def get_bbox_range(img_list,upperbondrange =0):
@@ -84,6 +92,7 @@ def get_bbox_range(img_list,upperbondrange =0):
 def get_landmark_and_bbox(img_list,upperbondrange =0):
     frames = read_imgs(img_list)
     batch_size_fa = 1
+    # разбивает кадры по батчам 1=1 1=5 но берет №1
     batches = [frames[i:i + batch_size_fa] for i in range(0, len(frames), batch_size_fa)]
     coords_list = []
     landmarks = []

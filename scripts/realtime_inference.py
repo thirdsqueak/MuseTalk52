@@ -11,7 +11,7 @@ from tqdm import tqdm
 import copy
 import json
 from transformers import WhisperModel
-
+from datetime import datetime
 from musetalk.utils.face_parsing import FaceParsing
 from musetalk.utils.utils import datagen
 from musetalk.utils.preprocessing import get_landmark_and_bbox, read_imgs
@@ -27,11 +27,15 @@ import subprocess
 
 
 def fast_check_ffmpeg():
+    
     try:
         subprocess.run(["ffmpeg", "-version"], capture_output=True, check=True)
         return True
     except:
         return False
+    # Check ffmpeg and add to PATH
+    
+  
 
 
 def video2imgs(vid_path, save_path, ext='.png', cut_frame=10000000):
@@ -55,11 +59,12 @@ def osmakedirs(path_list):
 
 @torch.no_grad()
 class Avatar:
+    # иниты айди всего: аватары видео
     def __init__(self, avatar_id, video_path, bbox_shift, batch_size, preparation):
         self.avatar_id = avatar_id
         self.video_path = video_path
         self.bbox_shift = bbox_shift
-        # 根据版本设置不同的基础路径
+        # 根据版本设置不同的基础路径 ??
         if args.version == "v15":
             self.base_path = f"./results/{args.version}/avatars/{avatar_id}"
         else:  # v1
@@ -85,13 +90,14 @@ class Avatar:
         self.init()
 
     def init(self):
+        #if preparation true this run! (need run on first start or recreate landmarks)
         if self.preparation:
             if os.path.exists(self.avatar_path):
-                response = input(f"{self.avatar_id} exists, Do you want to re-create it ? (y/n)")
+                response = input(f"{self.avatar_id} существует, пересаздать его (y/n)")
                 if response.lower() == "y":
                     shutil.rmtree(self.avatar_path)
                     print("*********************************")
-                    print(f"  creating avator: {self.avatar_id}")
+                    print(f"  создание аватара: {self.avatar_id}")
                     print("*********************************")
                     osmakedirs([self.avatar_path, self.full_imgs_path, self.video_out_path, self.mask_out_path])
                     self.prepare_material()
@@ -209,7 +215,7 @@ class Avatar:
 
         torch.save(self.input_latent_list_cycle, os.path.join(self.latents_out_path))
 
-    def process_frames(self, res_frame_queue, video_len, skip_save_images):
+    def process_frames(self, res_frame_queue, video_len, skip_save_images): #can =true to save, dependens  
         print(video_len)
         while True:
             if self.idx >= video_len - 1:
@@ -234,7 +240,11 @@ class Avatar:
             if skip_save_images is False:
                 cv2.imwrite(f"{self.avatar_path}/tmp/{str(self.idx).zfill(8)}.png", combine_frame)
             self.idx = self.idx + 1
-
+            
+            
+    # interface start here (inference)
+    
+    
     def inference(self, audio_path, out_vid_name, fps, skip_save_images):
         os.makedirs(self.avatar_path + '/tmp', exist_ok=True)
         print("start inference")
@@ -290,28 +300,65 @@ class Avatar:
                 video_num,
                 time.time() - start_time))
 
+
         if out_vid_name is not None and args.skip_save_images is False:
-            # optional
+            #current date
+            today_str = datetime.now().strftime("%d.%m")
+            
+            # 
+            existing_files = os.listdir(self.video_out_path)
+            
+            # 
+            prefix = "audio"
+            filtered = [f for f in existing_files if f.startswith(f"{prefix}_{today_str}_") and f.endswith(".mp4")]
+            
+            # 
+            max_num = 0
+            for f in filtered:
+                try:
+                    num_str = f.split(f"{today_str}_")[1].split(".mp4")[0]
+                    num = int(num_str)
+                    if num > max_num:
+                        max_num = num
+                except:
+                    pass
+            
+            next_num = max_num + 1
+            
+            # 
+            out_vid_name = f"{prefix}_{today_str}_{next_num}"
+            
+            # old code
             cmd_img2video = f"ffmpeg -y -v warning -r {fps} -f image2 -i {self.avatar_path}/tmp/%08d.png -vcodec libx264 -vf format=yuv420p -crf 18 {self.avatar_path}/temp.mp4"
             print(cmd_img2video)
             os.system(cmd_img2video)
 
-            output_vid = os.path.join(self.video_out_path, out_vid_name + ".mp4")  # on
-            cmd_combine_audio = f"ffmpeg -y -v warning -i {audio_path} -i {self.avatar_path}/temp.mp4 {output_vid}"
+            output_vid = os.path.join(self.video_out_path, out_vid_name + ".mp4")
+            
+            cmd_combine_audio = (
+                f"ffmpeg -y -v warning "
+                f"-i {self.avatar_path}/temp.mp4 "
+                f"-i {audio_path} "
+                f"-c:v copy -c:a aac -b:a 192k "
+                f"-shortest "
+                f"{output_vid}"
+            )
             print(cmd_combine_audio)
             os.system(cmd_combine_audio)
 
             os.remove(f"{self.avatar_path}/temp.mp4")
             shutil.rmtree(f"{self.avatar_path}/tmp")
             print(f"result is save to {output_vid}")
+            
         print("\n")
+
 
 
 if __name__ == "__main__":
     '''
     This script is used to simulate online chatting and applies necessary pre-processing such as face detection and face parsing in advance. During online chatting, only UNet and the VAE decoder are involved, which makes MuseTalk real-time.
     '''
-
+    weight_dtype = torch.float16
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", type=str, default="v15", choices=["v1", "v15"], help="Version of MuseTalk: v1 or v15")
     parser.add_argument("--ffmpeg_path", type=str, default="./ffmpeg-4.4-amd64-static/", help="Path to ffmpeg executable")
@@ -328,6 +375,7 @@ if __name__ == "__main__":
     parser.add_argument("--audio_padding_length_left", type=int, default=2, help="Left padding length for audio")
     parser.add_argument("--audio_padding_length_right", type=int, default=2, help="Right padding length for audio")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size for inference")
+    parser.add_argument("--use_float16", action="store_true", help="Use float16 for faster inference")
     #20 default
     parser.add_argument("--output_vid_name", type=str, default=None, help="Name of output video file")
     parser.add_argument("--use_saved_coord", action="store_true", help='Use saved coordinates to save time')
@@ -343,17 +391,19 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Configure ffmpeg path
-    if not fast_check_ffmpeg():
-        print("Adding ffmpeg to PATH")
-        # Choose path separator based on operating system
-        path_separator = ';' if sys.platform == 'win32' else ':'
-        os.environ["PATH"] = f"{args.ffmpeg_path}{path_separator}{os.environ['PATH']}"
-        if not fast_check_ffmpeg():
-            print("Warning: Unable to find ffmpeg, please ensure ffmpeg is properly installed")
+    # if not fast_check_ffmpeg():
+    #     print("Adding ffmpeg to PATH")
+    #     # Choose path separator based on operating system
+    #     path_separator = ';' if sys.platform == 'win32' else ':'
+    #     os.environ["PATH"] = f"{args.ffmpeg_path}{path_separator}{os.environ['PATH']}"
+    #     if not fast_check_ffmpeg():
+    #         print("Warning: Unable to find ffmpeg, please ensure ffmpeg is properly installed")
+   
 
     # Set computing device
     device = torch.device(f"cuda:{args.gpu_id}" if torch.cuda.is_available() else "cpu")
 
+    
     # Load model weights
     vae, unet, pe = load_all_model(
         unet_model_path=args.unet_model_path,
@@ -362,7 +412,8 @@ if __name__ == "__main__":
         device=device
     )
     timesteps = torch.tensor([0], device=device)
-
+    
+    #convert to float_16
     pe = pe.half().to(device)
     vae.vae = vae.vae.half().to(device)
     unet.model = unet.model.half().to(device)
